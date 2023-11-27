@@ -100,11 +100,17 @@ def shattering_dimensionality(
         pcloud1 = span_to_gaussian_cloud(point_set_1, nsamples=nsamples, noise_coef=noise_coef)
         pcloud2 = span_to_gaussian_cloud(point_set_2, nsamples=nsamples, noise_coef=noise_coef)
     
-        X = np.concatenate([pcloud1, pcloud2], axis = 0)
-        y = np.array([0] * len(pcloud1) + [1] * len(pcloud2))
+        X_train = np.concatenate([pcloud1, pcloud2], axis = 0)
+        y_train = np.array([0] * len(pcloud1) + [1] * len(pcloud2))
 
-        svc.fit(X, y)
-        score = svc.score(X, y)
+        pcloud3 = span_to_gaussian_cloud(point_set_1, nsamples=nsamples, noise_coef=noise_coef)
+        pcloud4 = span_to_gaussian_cloud(point_set_2, nsamples=nsamples, noise_coef=noise_coef)
+
+        X_test = np.concatenate([pcloud3, pcloud4], axis = 0)
+        y_test = np.array([0] * len(pcloud3) + [1] * len(pcloud4))
+    
+        svc.fit(X_train, y_train)
+        score = svc.score(X_test, y_test)
         decoding_scores.append(score)
         # if score > 1 - 1e-4: # if fully decodable
         #     separable_count += 1 
@@ -146,9 +152,10 @@ def CCGP(points, nsamples = 100, noise_coef = 0.2,
 
     svc = RidgeClassifier()
     all_score = []
+    training_ratio = 0.8
     for label_set1, label_set2 in zip(label_sets_1, label_sets_2):
-        label_sets_training_1 = list(combinations(label_set1, len(label_set1) // 2))
-        label_sets_training_2 = list(combinations(label_set2, len(label_set2) // 2))
+        label_sets_training_1 = list(combinations(label_set1, int(len(label_set1) * training_ratio)))
+        label_sets_training_2 = list(combinations(label_set2, int(len(label_set2) * training_ratio)))
         if sample_training_split is not None and sample_training_split > 0:
             random.shuffle(label_sets_training_1)
             label_sets_training_1 = label_sets_training_1[:sample_training_split]

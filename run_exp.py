@@ -18,5 +18,5 @@ if __name__ == "__main__":
 
     res = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
     with open("result_"+res+".txt", "w") as f:
-        f.write(f"{cube_dimension},{embedding_dimension},{noise_coef},{distortion_magnitude},{sd},{ccgp}")
+        f.write(f"{cube_dimension},{embedding_dimension},{noise_coef},{distortion_magnitude},{sd},{ccgp}\n")
 
