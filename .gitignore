@@ -1,3 +1,6 @@
+# visualization playground, mainly ipynb so that excluded to avoid super large file
+# playground/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

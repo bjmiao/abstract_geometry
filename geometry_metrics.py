@@ -1,5 +1,6 @@
 from sklearn.linear_model import RidgeClassifier
 from itertools import combinations
+from functools import reduce
 import random
 import numpy as np
 import pandas as pd
@@ -66,6 +67,55 @@ def generate_hypercube_in_embedding_space(cube_dimension, embedding_space_dimens
         hi_dim_cube = hi_dim_cube + sample_distortion(embedding_space_dimension, distortion_magnitude, size = num_vertex)
     return hi_dim_cube
 
+def generate_grid_in_embedding_space(dim_vertex_numbers, embedding_space_dimension,
+        distortion_magnitude = 0, interval = 1,
+        show_edges = False):
+    '''
+        dim_vertex_numbers: The number of vertex on each dimension. E.g. (2, 3) returns a 日 grid
+        embedding_space_dimension: same as the hypercube case. Deternimes the vector length of each vertex
+        distortion_magnitude: same
+        interval: Number or list. The intervel between different vertices along each direction. Number means a uniform interval.
+    '''
+    num_dim = len(dim_vertex_numbers)
+    num_vertex = reduce(lambda a,b: a*b, dim_vertex_numbers)
+    print(num_dim, num_vertex)
+    if type(interval) is float or type(interval) is int:
+        pass
+    else:
+        raise NotImplementedError("Grid other than uniform interval is not implemented yet")
+    hi_dim_grid = np.zeros(
+        (num_vertex, embedding_space_dimension),
+        dtype = 'float'
+    )
+    base = 1
+    for i in range(num_dim):
+        group_repeat = base
+        label_repeat = num_vertex // dim_vertex_numbers[i] // group_repeat
+        # print(group_repeat, label_repeat)
+        now_index = list(np.repeat(range(dim_vertex_numbers[i]), label_repeat)) * group_repeat
+        # print(i, len(now_index), now_index)
+        hi_dim_grid[:, i] = now_index
+        base = base * dim_vertex_numbers[i]
+    if show_edges:
+        # constructed all the edges
+        # TODO: independent of hi_dim_grid
+        edges = set()
+        for vid in range(num_vertex):
+            # a vertex has edge on each direction that it connects to the prev and next node
+            adjacent_vid_diff = num_vertex
+            for dim in range(num_dim):
+                adjacent_vid_diff = adjacent_vid_diff // dim_vertex_numbers[dim]
+                if hi_dim_grid[vid, dim] > 0:
+                    edges.add((vid-adjacent_vid_diff, vid)) # keep the edge (small, large) so that no repeat occurs
+                if hi_dim_grid[vid, dim] < dim_vertex_numbers[dim]-1:
+                    edges.add((vid, vid+adjacent_vid_diff))
+
+    if distortion_magnitude > 0:
+        hi_dim_grid = hi_dim_grid + sample_distortion(embedding_space_dimension, distortion_magnitude, size = num_vertex)
+    if show_edges:
+        return hi_dim_grid, edges
+    else:
+        return hi_dim_grid
 
 def shattering_dimensionality(
         points, nsamples = 100, noise_coef = 0.2,
@@ -195,3 +245,86 @@ def CCGP(points, nsamples = 100, noise_coef = 0.2,
         topK_score = all_score[np.argpartition(all_score, -top_K)[-top_K:]]
         return np.mean(topK_score)
 
+def predefine_dimension_for_ccgp(cube_dimension):
+    all_vertex = np.arange(2 ** cube_dimension)
+    a1 = []
+    a2 = []
+    for i in range(cube_dimension):
+        # get all (id & i == 0) vertex
+        a1.append(np.where(np.bitwise_and(all_vertex, 1 << i)))
+        a2.append(np.where(np.logical_not(np.bitwise_and(all_vertex, 1 << i))))
+    return a1, a2
+
+
+def linear_decoding_score_span_gaussion(points,
+        train_points_index, train_labels, test_points_index, test_labels,
+        nsamples = 100, noise_coef = 0.0
+    ):
+
+    X_train = span_to_gaussian_cloud(points[train_points_index, :], nsamples, noise_coef)
+    y_train = np.repeat(train_labels, nsamples)
+
+
+    X_test = span_to_gaussian_cloud(points[test_points_index, :], nsamples, noise_coef)
+    y_test = np.repeat(test_labels, nsamples)
+
+    print(X_train.shape, y_train.shape, X_test.shape, y_test.shape)
+    svc = RidgeClassifier()
+    svc.fit(X_train, y_train)
+    score = svc.score(X_test, y_test)
+    # all_score.append(score)
+    return score
+
+from sklearn.linear_model import LinearRegression
+def linear_regression_score_span_gaussion(points,
+        train_points_index, train_labels, test_points_index, test_labels,
+        nsamples = 100, noise_coef = 0.0
+    ):
+
+    X_train = span_to_gaussian_cloud(points[train_points_index, :], nsamples, noise_coef)
+    y_train = np.repeat(train_labels, nsamples)
+
+
+    X_test = span_to_gaussian_cloud(points[test_points_index, :], nsamples, noise_coef)
+    y_test = np.repeat(test_labels, nsamples)
+
+    print(X_train.shape, y_train.shape, X_test.shape, y_test.shape)
+
+    lr = LinearRegression()
+    lr.fit(X_train, y_train)
+    y_pred = lr.predict(X_test)
+    score = np.corrcoef(y_pred, y_test)[0, 1]
+    # svc = RidgeClassifier()
+    # svc.fit(X_train, y_train)
+    # score = svc.score(X_test, y_test)
+    # all_score.append(score)
+    return score
+
+
+def CCGP_grid_lastdim(points, grid_shape, nsamples = 100, noise_coef = 0.2):
+    '''
+        Calculate the CCGP of a grid and take the last dimension as decoding variable
+        points:
+        grid_shape: used to determine which directions we care about
+        decoding_dimensions: None or integer or list
+    '''
+    num_dim = len(grid_shape)
+    num_vertex = points.shape[0]
+     
+    # we first decode along the last dimension
+    num_context = num_vertex // grid_shape[-1]
+    num_label = grid_shape[-1]
+    # num_training_context = num_context-1
+    # num_test_context = 1
+    score_all = []
+    for test_context in range(num_context):
+        test_points_base = num_label * test_context
+        test_points_index = list(range(test_points_base, test_points_base + num_label))
+        test_label = list(range(num_label))
+        train_points_index = [x for x in range(num_vertex) if x not in test_points_index]
+        train_label = list(range(num_label)) * (num_context - 1)
+        print(train_points_index, train_label, test_points_index, test_label)
+        score = linear_regression_score_span_gaussion(points, train_points_index, train_label,
+                                            test_points_index, test_label, noise_coef=noise_coef)
+        score_all.append(score)
+    return np.mean(score_all)
