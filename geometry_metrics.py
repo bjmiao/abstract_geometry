@@ -51,7 +51,7 @@ def generate_hypercube_in_embedding_space(cube_dimension, embedding_space_dimens
         raise ValueError("Now we only support choice number is 2")
     num_vertex = len(choice) ** cube_dimension
     
-    if num_vertex > embedding_space_dimension:
+    if cube_dimension > embedding_space_dimension:
         raise ValueError("The cube dimension is higher than space dimension")
     hi_dim_cube = np.zeros(
         (num_vertex, embedding_space_dimension),
@@ -137,7 +137,7 @@ def shattering_dimensionality(
         random.shuffle(label_sets_1)
         label_sets_1 = label_sets_1[:sample_dichotomy]
     label_sets_2 = [tuple([x for x in range(num_points) if not x in label_set1]) for label_set1 in label_sets_1]
-    print("#sampling dichotomy:", len(label_sets_1), len(label_sets_2))
+    # print("#sampling dichotomy:", len(label_sets_1), len(label_sets_2))
 
     svc = RidgeClassifier(alpha=0.01)
     # separable_count = 0
@@ -174,7 +174,7 @@ def shattering_dimensionality(
 
 def CCGP(points, nsamples = 100, noise_coef = 0.2,
          predefined_dichotomy = None, sample_dichotomy = None, sample_training_split = None,
-         top_K = 3, verbose = False):
+         verbose = False):
     '''
         Calculate the CCGP of a manifold
         Points: (num_points, dimension)
@@ -199,8 +199,7 @@ def CCGP(points, nsamples = 100, noise_coef = 0.2,
             label_sets_1 = label_sets_1[:sample_dichotomy]
         label_sets_2 = [tuple([x for x in range(num_points) if not x in label_set1]) for label_set1 in label_sets_1]
 
-
-    svc = RidgeClassifier()
+    svc = RidgeClassifier(alpha=0.01)
     all_score = []
     training_ratio = 0.8
     for label_set1, label_set2 in zip(label_sets_1, label_sets_2):
@@ -242,17 +241,21 @@ def CCGP(points, nsamples = 100, noise_coef = 0.2,
     if verbose:
         return all_score
     else:
+        top_K = len(label_sets_1)
         topK_score = all_score[np.argpartition(all_score, -top_K)[-top_K:]]
         return np.mean(topK_score)
 
 def predefine_dimension_for_ccgp(cube_dimension):
+    '''
+        Get pre-defined dimension for maximum ccgp calculation
+    '''
     all_vertex = np.arange(2 ** cube_dimension)
     a1 = []
     a2 = []
     for i in range(cube_dimension):
         # get all (id & i == 0) vertex
-        a1.append(np.where(np.bitwise_and(all_vertex, 1 << i)))
-        a2.append(np.where(np.logical_not(np.bitwise_and(all_vertex, 1 << i))))
+        a1.append(np.where(np.bitwise_and(all_vertex, 1 << i))[0])
+        a2.append(np.where(np.logical_not(np.bitwise_and(all_vertex, 1 << i)))[0])
     return a1, a2
 
 
@@ -260,6 +263,9 @@ def linear_decoding_score_span_gaussion(points,
         train_points_index, train_labels, test_points_index, test_labels,
         nsamples = 100, noise_coef = 0.0
     ):
+    '''
+        This is a convenient wrapper for getting the result of a decoder quickly.
+    '''
 
     X_train = span_to_gaussian_cloud(points[train_points_index, :], nsamples, noise_coef)
     y_train = np.repeat(train_labels, nsamples)
@@ -269,7 +275,7 @@ def linear_decoding_score_span_gaussion(points,
     y_test = np.repeat(test_labels, nsamples)
 
     print(X_train.shape, y_train.shape, X_test.shape, y_test.shape)
-    svc = RidgeClassifier()
+    svc = RidgeClassifier(alpha=0.01)
     svc.fit(X_train, y_train)
     score = svc.score(X_test, y_test)
     # all_score.append(score)
